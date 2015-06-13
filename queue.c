@@ -1,4 +1,6 @@
 #include "queue.h"
+#include <stdlib.h>
+#include <stdio.h>
 
 /*
 typedef struct{
@@ -16,7 +18,6 @@ typedef struct{
 } r_queue;
 */
 
-
 //RULES
 /*
  * 1. If entry's meeting_id is set than it's nomovable.
@@ -24,51 +25,52 @@ typedef struct{
  */
 //QUEUE FUNCTIONS
 
-int queue_init(r_queue* queue, int id)
+r_queue* queue_init(int id)
 {
-   queue = malloc(sizeof r_queue);
+   r_queue* queue;
+   queue = malloc(sizeof(r_queue));
    
    if(queue==NULL)
-    return -1;
+    return queue;
    
    queue->id = id;
-   queue->entries=malloc(sizeof queue_entry);
+   queue->entries=malloc(sizeof(queue_entry));
    queue->entries->id=-1;
-   queue->entries->lamport_clock=0;
+   queue->entries->lamport_clock=-1;
    queue->entries->next=NULL;
-   return 0;
+   return queue;
 }
 
 int queue_free(r_queue* queue)
 {
-  queue_entry* field = queue->next;
-  queue_entry* rest = field->next;
+  queue_entry* field = queue->entries;
   while(field!=NULL)
   {
+    queue_entry* rest = field->next;
     free(field);
     field=rest;
-    rest=field->next;
   }
   free(queue);
+  return 0;
 }
 
 int queue_add(r_queue* queue, int send_id, int lamport_clock)
 {
-  queue_entry* entry = malloc(sizeof queue_entry);
+  queue_entry* entry = malloc(sizeof(queue_entry));
   int i=1;
   
-  if(queue_entry==NULL)
+  if(entry==NULL)
     return -1;
   
-  entry->send_id=send_id;
+  entry->id=send_id;
   entry->lamport_clock=lamport_clock;
-  entry->meeting_id=0;
-  entry->cylon_id=0;
+  entry->meeting_id=-1;
+  entry->cylon_id=-1;
   entry->next=NULL;
   
   queue_entry* field = queue->entries;
   
-  while( ((field->lamport_clock<lamport_clock) || (field->meeting_id+field->cylon_id>0)) && (field->next!=NULL) )
+  while((field->lamport_clock<lamport_clock) && (field->next!=NULL) && (field->next->lamport_clock<lamport_clock) )
   {
     field=field->next;
     i++;
@@ -145,7 +147,7 @@ int queue_to_array(r_queue* queue, queue_entry array[])
   return 0;
 }
 
-int queue_size(r_queue* queue);
+int queue_size(r_queue* queue)
 {
   int i=0;
   
