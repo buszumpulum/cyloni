@@ -29,12 +29,12 @@ void queue_sort(r_queue* queue);//TODO
 
 queue_entry* queue_get(r_queue* queue, int id);//TESTED
 
-int queue_remove(r_queue* queue, int id);
+int queue_remove(r_queue* queue, int id);//TESTED
 
-int queue_to_array(r_queue* queue, queue_entry array[]);
+int queue_to_array(r_queue* queue, queue_entry array[]);//PROBABLY POINTLESS
 
-int queue_size(r_queue* queue);
+int queue_size(r_queue* queue);//TESTED
 
-int queue_top(r_queue* queue);
+int queue_top(r_queue* queue);//TESTED
 
-int queue_position(r_queue* queue, int id);
+int queue_position(r_queue* queue, int id);//TESTED
