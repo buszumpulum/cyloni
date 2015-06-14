@@ -3,13 +3,13 @@
 #include <mpi.h>
 #include <time.h>
 #include <string.h>
-//#include "queue.h"
+#include "queue.h"
 
 #define DEF_INSTITUTE 10
 #define DEF_CYLON 30
 
 #define MSG_REQUEST 100
-#define MSG_RESPOSE 200
+#define MSG_RESPONSE 200
 #define MSG_MEETING 300
 #define MSG_FREE 400
 #define MSG_READY 500
@@ -21,6 +21,11 @@ typedef struct msg{
   int meeting;
 } msg;
 
+r_queue **queues;
+int lamport_clock=0;
+int max_known_meeting_id=0;
+
+//PHASE 1 INITIALIZATION
 void init_msg_struct(MPI_Datatype *mpi_msg_type)
 {
   int blocklengths[4] = {1,1, 1, 1};
@@ -64,10 +69,23 @@ void initialization(int argc, char **argv, int *size ,int *tid, int *insts, int 
     
   MPI_Comm_rank( MPI_COMM_WORLD, tid );
     
-  parse_params(argc, argv, insts, cylons); 
+  parse_params(argc, argv, insts, cylons);
+  
+  queues = malloc((size_t)((*insts)+1)*sizeof(r_queue*));
+  int i;
+  for(i=0;i<(*insts)+1;i++)
+    queues[i] = queue_init(i);
+  
   srand(clock()*(*tid));
   sleep(rand()%3);
   MPI_Barrier(MPI_COMM_WORLD);
+}
+
+//PHASE 2: INSTITUTE DRAWING
+int rand_institute(int institutes)
+{
+  int institute = rand()%(2*institutes)-institutes+1;
+  return institute < 0 ? 0 : institute;
 }
 
 void main_loop(int size, int tid, int institutes, int cylons, MPI_Datatype msg_struct)
@@ -75,30 +93,86 @@ void main_loop(int size, int tid, int institutes, int cylons, MPI_Datatype msg_s
   int i=0; 
   while(i<2)
   {
-    int institute = rand()%(2*institutes)-institutes+1;
-    institute = institute < 0 ? 0 : institute;
+    //SET INSTITUTE
+    int institute = rand_institute(institutes);
       
     printf("[#%d:%d] Narada w instytucie: %d\n", tid+1, i, institute);
     
     msg message;
     message.id=tid;
-    message.lamport=10;
+    message.lamport=lamport_clock;
     message.institute=institute;
     message.meeting=0;
     
+    //SEND REQUEST TO ALL
     int j;
+    lamport_clock++;
     for(j=0;j<size;j++)
       if(j!=tid)
 	MPI_Send( &message, 1, msg_struct, j, MSG_REQUEST, MPI_COMM_WORLD);
-      
+     
+    //REVIEVE REQUESTS FROM ALL AND SEND RESPONDS
     for(j=0;j<size;j++)
     {
       if(j==tid) continue;
       msg res;
       MPI_Status status;
+      lamport_clock++;
       MPI_Recv( &res, 1, msg_struct, MPI_ANY_SOURCE, MSG_REQUEST, MPI_COMM_WORLD, &status);
-      printf("[%d] Recv id:%d lamport:%d institute:%d meeting:%d\n", tid, res.id, res.lamport, res.institute, res.meeting);
+      lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;
+      printf("[%4d:%4d] Recv request id:%4d lamport:%4d institute:%4d meeting:%4d\n", lamport_clock, tid, res.id, res.lamport, res.institute, res.meeting);
+      queue_add(queues[res.institute], res.id, res.lamport);
+      message.lamport=++lamport_clock;
+      MPI_Send( &message, 1, msg_struct, j, MSG_RESPONSE, MPI_COMM_WORLD);
     }
+    
+    //RECIEVE RESPONDS FROM ALL
+    for(j=0;j<size;j++)
+    {
+      if(j==tid) continue;
+      msg res;
+      MPI_Status status;
+      lamport_clock++;
+      MPI_Recv( &res, 1, msg_struct, MPI_ANY_SOURCE, MSG_RESPONSE, MPI_COMM_WORLD, &status);
+      lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;
+      printf("[%4d:%4d] Recv respond id:%4d lamport:%4d\n", lamport_clock, tid, res.id, res.lamport);
+    }
+    
+    //COMPARE TOPS RANKS
+    int my_rank = 1;
+    int my_inst_id, my_inst_lamport;
+    queue_top(queues[institute], &my_inst_id, &my_inst_lamport);
+    for(j=1;j<institutes+1;j++)
+    {
+      int inst_id, inst_lamport;
+      queue_top(queues[j], &inst_id, &inst_lamport);
+      if((inst_lamport<my_inst_lamport) || ((inst_lamport==my_inst_lamport) && (inst_id<my_inst_id)))
+	my_rank++;
+    }
+    printf("[%4d:%4d] My_rank:%4d, institute:%4d\n", lamport_clock, tid, my_rank, institute);
+    //SET MEETING ID
+    int my_meeting = max_known_meeting_id+my_rank;
+    max_known_meeting_id+=my_rank
+    
+    message.meeting=my_meeting;
+    
+    lamport_clock++;
+    message.lamport=lamport_clock;
+    for(j=0;j<size;j++)
+      if(j!=tid)
+	MPI_Send( &message, 1, msg_struct, j, MSG_MEETING, MPI_COMM_WORLD);
+    
+    for(j=0;j<size;j++)
+    {
+      if(j==tid) continue;
+      msg res;
+      MPI_Status status;
+      lamport_clock++;
+      MPI_Recv( &res, 1, msg_struct, MPI_ANY_SOURCE, MSG_RESPONSE, MPI_COMM_WORLD, &status);
+      lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;
+      printf("[%4d:%4d] Recv respond id:%4d lamport:%4d\n", lamport_clock, tid, res.id, res.lamport);
+    }
+     
     
     i++;
   }
@@ -117,5 +191,9 @@ int main(int argc,char **argv)
     main_loop(size, tid, institutes_count, cylons_count, msg_struct);
     
     MPI_Type_free(&msg_struct);
+    
+    int i;
+    for(i=0;i<institutes_count+1;i++)
+      queue_free(queues[i]);
     MPI_Finalize();
 }

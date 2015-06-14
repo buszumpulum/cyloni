@@ -35,6 +35,6 @@ int queue_to_array(r_queue* queue, queue_entry array[]);//PROBABLY POINTLESS
 
 int queue_size(r_queue* queue);//TESTED
 
-int queue_top(r_queue* queue);//TESTED
+int queue_top(r_queue* queue, int *id, int *lamport);//TESTED
 
 int queue_position(r_queue* queue, int id);//TESTED
