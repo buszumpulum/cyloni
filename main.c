@@ -70,9 +70,39 @@ void initialization(int argc, char **argv, int *size ,int *tid, int *insts, int 
   MPI_Barrier(MPI_COMM_WORLD);
 }
 
-
-
-void main_loop(){}
+void main_loop(int size, int tid, int institutes, int cylons, MPI_Datatype msg_struct)
+{
+  int i=0; 
+  while(i<2)
+  {
+    int institute = rand()%(2*institutes)-institutes+1;
+    institute = institute < 0 ? 0 : institute;
+      
+    printf("[#%d:%d] Narada w instytucie: %d\n", tid+1, i, institute);
+    
+    msg message;
+    message.id=tid;
+    message.lamport=10;
+    message.institute=institute;
+    message.meeting=0;
+    
+    int j;
+    for(j=0;j<size;j++)
+      if(j!=tid)
+	MPI_Send( &message, 1, msg_struct, j, MSG_REQUEST, MPI_COMM_WORLD);
+      
+    for(j=0;j<size;j++)
+    {
+      if(j==tid) continue;
+      msg res;
+      MPI_Status status;
+      MPI_Recv( &res, 1, msg_struct, MPI_ANY_SOURCE, MSG_REQUEST, MPI_COMM_WORLD, &status);
+      printf("[%d] Recv id:%d lamport:%d institute:%d meeting:%d\n", tid, res.id, res.lamport, res.institute, res.meeting);
+    }
+    
+    i++;
+  }
+}
 
 int main(int argc,char **argv)
 {
@@ -84,24 +114,8 @@ int main(int argc,char **argv)
     
     printf("%d %d\n", institutes_count, cylons_count);
     
-    //PROCES LOSUJE NUMER INSTYTUTU
-    int i;
-    for(i=0;i<2;i++)
-    {
-      int institute = rand()%(2*institutes_count)-institutes_count+1;
-      institute = institute < 0 ? 0 : institute;
-      
+    main_loop(size, tid, institutes_count, cylons_count, msg_struct);
     
-      printf("[#%d:%d] Narada w instytucie: %d\n", tid+1, i, institute);
-      if(institute==0)
-      {
-	int sleep_time = rand()%10;
-	printf("[#%d] SLEEP: %d\n", tid+1,sleep_time);
-	sleep(sleep_time);
-	continue;
-      }
-      sleep(2);
-    }
     MPI_Type_free(&msg_struct);
     MPI_Finalize();
 }
