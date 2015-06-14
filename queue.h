@@ -29,6 +29,8 @@ void queue_sort(r_queue* queue);//TODO
 
 queue_entry* queue_get(r_queue* queue, int id);//TESTED
 
+int queue_get_id(r_queue* queue, int num);
+
 int queue_remove(r_queue* queue, int id);//TESTED
 
 int queue_to_array(r_queue* queue, queue_entry array[]);//PROBABLY POINTLESS

@@ -70,8 +70,8 @@ int queue_add(r_queue* queue, int send_id, int lamport_clock)
   
   queue_entry* field = queue->entries;
   
-  while((field->lamport_clock<lamport_clock) && (field->next!=NULL) && 
-    ((field->next->lamport_clock<lamport_clock) || (field->next->lamport_clock==lamport_clock && field->next->id<send_id)))
+  while((field->next!=NULL) && 
+    ((field->next->lamport_clock<lamport_clock) || ((field->next->lamport_clock==lamport_clock) && (field->next->id<send_id))))
   {
     field=field->next;
     i++;
@@ -184,4 +184,18 @@ int queue_position(r_queue* queue, int id)
   if(field==NULL)
     return -1;
   return i;
+}
+
+int queue_get_id(r_queue* queue, int num)
+{
+  int i=-1;
+  
+  queue_entry* entry = queue->entries;
+  while(entry!=NULL && i!=num)
+  {
+    i++;
+    entry=entry->next;
+  }
+  
+  return entry!=NULL ? entry->id : -1;
 }

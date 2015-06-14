@@ -18,13 +18,11 @@ int main(void)
   r_queue* queue;
   queue = queue_init(1);
   int i;
-  for(i=2;i<7;i++)
+  for(i=7;i>2;i--)
   {
-    queue_add(queue,i,i);
+    queue_add(queue,i,i%2 == 0 ? 1 : 2);
     printf("\n");
     print_all(queue);
   }
-  printf("position[%d]: %d\n", 8,queue_position(queue, 8));
-  queue_free(queue);
   return 0;
 }
