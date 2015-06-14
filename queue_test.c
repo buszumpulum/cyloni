@@ -17,18 +17,14 @@ int main(void)
 {
   r_queue* queue;
   queue = queue_init(1);
-  
   int i;
-  for(i=7;i>2;i--)
+  for(i=2;i<7;i++)
   {
     queue_add(queue,i,i);
     printf("\n");
     print_all(queue);
   }
-  queue_set_cylon(queue, 3, 153);
-  queue_entry* entry = queue_get(queue, 6);
-  if(entry!=NULL)
-    printf("\t %d %d %d %d\n", entry->id, entry->lamport_clock, entry->meeting_id, entry->cylon_id);
+  printf("position[%d]: %d\n", 8,queue_position(queue, 8));
   queue_free(queue);
   return 0;
 }

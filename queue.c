@@ -149,7 +149,7 @@ int queue_to_array(r_queue* queue, queue_entry array[])
 
 int queue_size(r_queue* queue)
 {
-  int i=0;
+  int i=-1;
   
   queue_entry* entry = queue->entries;
   while(entry!=NULL)
