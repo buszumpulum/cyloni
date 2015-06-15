@@ -99,8 +99,19 @@ int rand_institute(int institutes)
   return institute < 0 ? 0 : institute;
 }
 
+
+
 void main_loop(int size, int tid, int institutes, int cylons, MPI_Datatype msg_struct)
 {
+  //BEGIN PHASE INDICATORS
+    //BEGIN STEPS
+  int institute_draw=1;
+  int request_send,respond_recieve,meeting_setting=0;
+    //END STEPS
+    //BEGIN COMMUNICATION
+  
+    //END COMMUNICATION
+  //END PHASE INDICATORS
   int i=0; 
   while(i<2)
   {
@@ -255,7 +266,6 @@ int main(int argc,char **argv)
     MPI_Datatype msg_struct;
     initialization(argc, argv, &size, &tid, &institutes_count, &cylons_count,&msg_struct);    
     
-    
     //printf("%d %d\n", institutes_count, cylons_count);
     
     main_loop(size, tid, institutes_count, cylons_count, msg_struct);
@@ -266,4 +276,5 @@ int main(int argc,char **argv)
     for(i=0;i<institutes_count+1;i++)
       queue_free(queues[i]);
     MPI_Finalize();
+    return 0;
 }
