@@ -219,3 +219,16 @@ int queue_count_below_limit(r_queue* queue, int cylons)
   int size = queue_size(queue);
   return size > cylons ? cylons : size;
 }
+
+int queue_clean(r_queue* queue)
+{
+  queue_entry* field = queue->entries->next;
+  queue->entries->next=NULL;
+  while(field!=NULL)
+  {
+    queue_entry* rest = field->next;
+    free(field);
+    field=rest;
+  }
+  return 0;
+}

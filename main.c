@@ -7,9 +7,8 @@
 
 #define MSG_REQUEST 100
 #define MSG_RESPONSE 200
-#define MSG_MEETING 300
-#define MSG_FREE 400
-#define MSG_READY 500
+#define MSG_RELASE 300
+#define MSG_READY 400
 
 typedef struct msg{
   int id;
@@ -27,6 +26,7 @@ int my_cylon=0;
 int my_institute=0;
 MPI_Datatype mpi_msg_type;
 int size, tid;
+int cycles=10;
 
 void print_all(r_queue* queue, int id)
 {
@@ -62,14 +62,22 @@ void parse_params(int argc, char **argv)
   for(i=1;i<argc-1;i++)
   {
     if(strcmp(argv[i],"-i")==0)
-    {
       institutes = atoi(argv[i+1]);
-    }
+    
     if(strcmp(argv[i],"-c")==0)
-    {
       cylons = atoi(argv[i+1]);
-    }
+    
+    if(strcmp(argv[i],"-n")==0)
+      cycles = atoi(argv[i+1]);
   }
+  if(institutes<=0)
+    institutes=10;
+  
+  if(cylons<=0)
+    cylons=30;
+  
+  if(cycles<0)
+    cycles=10;
 }
 
 void initialization(int argc, char **argv)
@@ -91,7 +99,7 @@ void initialization(int argc, char **argv)
   MPI_Barrier(MPI_COMM_WORLD);
 }
 
-void rand_institute()
+void random_institute()
 {
   my_institute = rand()%(institutes+1);//(2*institutes)-institutes+1;
   my_instytute = my_institute < 0 ? 0 : my_institute;
@@ -118,7 +126,7 @@ void collect_requests_and_respond()
   message.id=tid;
   int i;
   int expected_messages = size-1;
-  for(i=i;i<institutes;i++)
+  for(i=1;i<institutes+1;i++)
     expected_messages-=queue_size(queue[i]);
   
   for(i=0;i<expected_messages;i++)
@@ -142,7 +150,7 @@ void collect_responses()
   msg res;
   int i;
   MPI_Status status;
-  for(i=0;i<institutes;i++)
+  for(i=0;i<size;i++)
   {
     lamport_clock++;
     MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_REQUEST, MPI_COMM_WORLD, &status);
@@ -153,13 +161,14 @@ void collect_responses()
 
 void calculate_meeting_number()
 {
+  int i;
   int active_institutes=0;
   int my_rank = 1;
   int my_inst_id, my_inst_lamport;
   
   queue_top(queues[my_institute], &my_inst_id, &my_inst_lamport);
   
-  for(i=1;j<institutes+1;i++)
+  for(i=1;i<institutes+1;i++)
   {
     int inst_id, inst_lamport;
     queue_top(queues[i], &inst_id, &inst_lamport);
@@ -239,36 +248,45 @@ void collect_relases()
 
 void main_loop()
 {
-  int i=0; 
-  while(i<2)
+  int i=0;
+  while(i<=cycles)
   {
-    //SET INSTITUTE
-    rand_institute();
+    random_institute();
     
-    //SEND REQUEST
     send_request();
-    queue_add(queues[my_institute], message.id, message.lamport);
-     
-    //REVIEVE REQUESTS AND SEND RESPONDS
+    
     collect_requests_and_respond();
     
-    //RECIEVE RESPONSES FROM ALL
     collect_responses();
     
-    //RECIEVE READY FROM ALL COMPANIONS
-   
+    calculate_meeting_number()
     
-    //ACTUAL MEETING
-    sleep(rand()%4);
-    
-    //SEND FREE TO ALL
-    
-    
-    //RECIEVE FREE FROM ALL
-    
-    } 
+    if(my_institute!=0)
+    {
+      while(queue_position(queues[my_institute], tid)>=cylons)
+      {
+	collect_relases();
+	
+	collect_requests_and_respond();
+	
+	calculate_meeting_number();
+      }
+	
+     calculate_cylon_number();
       
-    i++;
+     send_ready();
+     
+     collect_readys();
+     
+     sleep(rand()%5);
+     
+     send_relase();
+    }
+    
+    collect_relases();
+    
+    if(cycles!=0)
+      i++;
   }
 }
 

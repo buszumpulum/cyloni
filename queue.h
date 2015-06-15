@@ -44,3 +44,5 @@ int queue_position(r_queue* queue, int id);//TESTED
 int queue_count_with_meeting(r_queue* queue);
 
 int queue_count_below_limit(r_queue* queue, int cylons);
+
+int queue_clean(r_queue* queue);
