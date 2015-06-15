@@ -24,6 +24,7 @@ int institutes=10;
 int cylons=30;
 int my_cylon=0;
 int my_institute=0;
+int my_meeting=0;
 MPI_Datatype mpi_msg_type;
 int size, tid;
 int cycles=10;
@@ -102,7 +103,7 @@ void initialization(int argc, char **argv)
 void random_institute()
 {
   my_institute = rand()%(institutes+1);//(2*institutes)-institutes+1;
-  my_instytute = my_institute < 0 ? 0 : my_institute;
+  my_institute = my_institute < 0 ? 0 : my_institute;
 }
 
 void send_request()
@@ -113,10 +114,10 @@ void send_request()
   message.lamport=++lamport_clock;
   message.institute=my_institute;
   for(i=0;i<size;i++)
-  if(j!=tid)
+  if(i!=tid)
   {
     lamport_clock++;
-    MPI_Send( &message, 1, mpi_msg_type, j, MSG_REQUEST, MPI_COMM_WORLD);
+    MPI_Send( &message, 1, mpi_msg_type, i, MSG_REQUEST, MPI_COMM_WORLD);
   }
 }
 
@@ -127,7 +128,7 @@ void collect_requests_and_respond()
   int i;
   int expected_messages = size-1;
   for(i=1;i<institutes+1;i++)
-    expected_messages-=queue_size(queue[i]);
+    expected_messages-=queue_size(queues[i]);
   
   for(i=0;i<expected_messages;i++)
   {
@@ -174,28 +175,32 @@ void calculate_meeting_number()
     queue_top(queues[i], &inst_id, &inst_lamport);
     if((inst_lamport<my_inst_lamport) || ((inst_lamport==my_inst_lamport) && (inst_id<my_inst_id)))
       my_rank++;
-    if(queue_size(queue[i]>0)
+    if(queue_size(queues[i])>0)
       active_institutes++;
   }
-    
   my_meeting=max_known_meeting_id+my_rank;
   max_known_meeting_id+=active_institutes;
 }
 
 void calculate_cylon_number()
 {
-  my_cylon=1+queue_position(queue[my_institute], tid);
+  my_cylon=1+queue_position(queues[my_institute], tid);
 }
 
 void send_ready()
 {
+  msg message;
+  message.id=tid;
   int i;
   int q_size = queue_count_below_limit(queues[my_institute], cylons);
   for(i=0;i<q_size;i++)
     {
-      int needed_id = queue_get_id(queues[my_institute], j);
+      int needed_id = queue_get_id(queues[my_institute], i);
       if(needed_id!=tid)
+      {
+	message.lamport=++lamport_clock;
 	MPI_Send( &message, 1, mpi_msg_type, needed_id, MSG_READY, MPI_COMM_WORLD);
+      }
     }
 }
 
@@ -232,15 +237,15 @@ void collect_relases()
   int q_size=0;
   int i;
   for(i=1;i<institutes+1;i++)
-    q_size+=queue_count_below_limit(queue[i], cylons);
+    q_size+=queue_count_below_limit(queues[i], cylons);
   for(i=0;i<size;i++)
   {  
-    if(j==tid) 
+    if(i==tid) 
       continue;
     msg res;
     MPI_Status status;
     lamport_clock++;
-    MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_FREE, MPI_COMM_WORLD, &status);
+    MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_RELASE, MPI_COMM_WORLD, &status);
     lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;  
     queue_remove(queues[res.institute], res.id);
   }
@@ -259,7 +264,7 @@ void main_loop()
     
     collect_responses();
     
-    calculate_meeting_number()
+    calculate_meeting_number();
     
     if(my_institute!=0)
     {
@@ -284,6 +289,10 @@ void main_loop()
     }
     
     collect_relases();
+    
+    my_institute=0;
+    my_cylon=0;
+    my_meeting=0;
     
     if(cycles!=0)
       i++;
