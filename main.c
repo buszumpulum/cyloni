@@ -29,14 +29,14 @@ MPI_Datatype mpi_msg_type;
 int size, tid;
 int cycles=10;
 
-void print_all(r_queue* queue, int id)
+void print_all(r_queue* queue)
 {
   int i = 0;
   queue_entry* entry = queue->entries;
   entry = entry->next;
   while(entry!=NULL)
   {
-    printf("[%d][%d] %d %d %d %d\n", id, i++,entry->id, entry->lamport_clock, entry->meeting_id, entry->cylon_id);
+    printf("[%d][%d] %d %d %d %d\n", tid, i++,entry->id, entry->lamport_clock, entry->meeting_id, entry->cylon_id);
     entry=entry->next;
   }
 }
@@ -104,6 +104,7 @@ void random_institute()
 {
   my_institute = rand()%(institutes+1);//(2*institutes)-institutes+1;
   my_institute = my_institute < 0 ? 0 : my_institute;
+  //printf("%d : [%d] assigned to institute=%d\n", lamport_clock, tid, my_institute);
 }
 
 void send_request()
@@ -113,6 +114,8 @@ void send_request()
   message.id=tid;
   message.lamport=++lamport_clock;
   message.institute=my_institute;
+  queue_add(queues[my_institute], tid, lamport_clock);
+  //printf("%d : [%d] sending request for institute=%d\n", lamport_clock, tid, my_institute);
   for(i=0;i<size;i++)
   if(i!=tid)
   {
@@ -126,23 +129,30 @@ void collect_requests_and_respond()
   msg message;
   message.id=tid;
   int i;
+  int sum=0;
   int expected_messages = size-1;
   for(i=1;i<institutes+1;i++)
-    expected_messages-=queue_size(queues[i]);
+  {
+    sum+=queue_size(queues[i]);
+    if(queue_size(queues[i])>0)
+      print_all(queues[i]);
+  }
+  printf("%d : [%d] %d still in queues (%d)\n", lamport_clock, tid, sum, expected_messages-sum+1);
   
-  for(i=0;i<expected_messages;i++)
+  for(i=0;i<expected_messages-sum;i++)
   {
     msg res;
     MPI_Status status;
     lamport_clock++;
+    printf("%d : [%d] (%d) requests still expected\n", lamport_clock, tid, expected_messages-i);
     MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_REQUEST, MPI_COMM_WORLD, &status);
     lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;
-    printf("%d : [%d] recieved request from %d(%d) : institute=%d\n", lamport_clock, tid, res.id, res.lamport, res.institute);
+    //printf("%d : [%d] recieved request from %d(%d) : institute=%d\n", lamport_clock, tid, res.id, res.lamport, res.institute);
     queue_add(queues[res.institute], res.id, res.lamport);
     
     message.lamport=++lamport_clock;
     MPI_Send( &message, 1, mpi_msg_type, res.id, MSG_RESPONSE, MPI_COMM_WORLD);
-    printf("%d : [%d] sended respond to %d\n", lamport_clock, tid, res.id);
+    //printf("%d : [%d] sent respond to %d\n", lamport_clock, tid, res.id);
   }
 }
 
@@ -151,11 +161,13 @@ void collect_responses()
   msg res;
   int i;
   MPI_Status status;
-  for(i=0;i<size;i++)
+  for(i=0;i<size-1;i++)
   {
     lamport_clock++;
-    MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_REQUEST, MPI_COMM_WORLD, &status);
+     printf("%d : [%d] (%d) responses still expected\n", lamport_clock, tid, size-1-i);
+    MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_RESPONSE, MPI_COMM_WORLD, &status);
     lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;
+    printf("%d : [%d] recieved response from %d\n", lamport_clock, tid, res.id);
   }
   printf("%d : [%d] collected all responses\n", lamport_clock, tid);
 }
@@ -180,11 +192,13 @@ void calculate_meeting_number()
   }
   my_meeting=max_known_meeting_id+my_rank;
   max_known_meeting_id+=active_institutes;
+  //printf("%d : [%d] is attempting to meeting number %d (%d) in institute %d\n", lamport_clock, tid, my_meeting, max_known_meeting_id, my_institute);
 }
 
 void calculate_cylon_number()
 {
   my_cylon=1+queue_position(queues[my_institute], tid);
+  //printf("%d : [%d] assigned to cylon %d at meeting %d in institute %d\n", lamport_clock, tid, my_cylon, my_meeting, my_institute);
 }
 
 void send_ready()
@@ -202,6 +216,7 @@ void send_ready()
 	MPI_Send( &message, 1, mpi_msg_type, needed_id, MSG_READY, MPI_COMM_WORLD);
       }
     }
+   // printf("%d : [%d] ready to meeting number %d\n", lamport_clock, tid, my_meeting);
 }
 
 void collect_readys()
@@ -213,9 +228,11 @@ void collect_readys()
     msg res;
     MPI_Status status;
     lamport_clock++;
+   //  printf("%d : [%d] (%d) readys still expected\n", lamport_clock, tid, q_size-1-i);
     MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_READY, MPI_COMM_WORLD, &status);  
     lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;
-    }
+  }
+ // printf("%d : [%d] all participants confirmed being ready to meeting %d\n", lamport_clock, tid, my_meeting);
 }
 
 void send_relase()
@@ -230,6 +247,7 @@ void send_relase()
   for(i=0;i<size;i++)
     if(i!=tid)
       MPI_Send( &message, 1, mpi_msg_type, i, MSG_RELASE, MPI_COMM_WORLD);
+  //printf("%d : [%d] relased request to visit institute %d\n", lamport_clock, tid, my_institute);
 }
 
 void collect_relases()
@@ -238,16 +256,15 @@ void collect_relases()
   int i;
   for(i=1;i<institutes+1;i++)
     q_size+=queue_count_below_limit(queues[i], cylons);
-  for(i=0;i<size;i++)
+  for(i=0;i<q_size;i++)
   {  
-    if(i==tid) 
-      continue;
     msg res;
     MPI_Status status;
     lamport_clock++;
     MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_RELASE, MPI_COMM_WORLD, &status);
     lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;  
     queue_remove(queues[res.institute], res.id);
+    printf("%d : [%d] relased request from %d\n", lamport_clock, tid,res.id);
   }
 }
 
@@ -270,6 +287,7 @@ void main_loop()
     {
       while(queue_position(queues[my_institute], tid)>=cylons)
       {
+	printf("%d : [%d] failed to attempt meeting %d in institute %d; Waiting for relases...\n", lamport_clock, tid, my_meeting, my_institute);
 	collect_relases();
 	
 	collect_requests_and_respond();
@@ -283,12 +301,20 @@ void main_loop()
      
      collect_readys();
      
+    // printf("%d : [%d] meeting %d started\n", ++lamport_clock, tid, my_meeting);
      sleep(rand()%5);
+   //  printf("%d : [%d] meeting %d ended\n", ++lamport_clock, tid, my_meeting);
      
      send_relase();
     }
+    else
+     printf("%d : [%d] not invited to any institute\n", ++lamport_clock, tid);
+   
+    queue_remove(queues[my_institute], tid);
     
     collect_relases();
+    
+    queue_clean(queues[0]);
     
     my_institute=0;
     my_cylon=0;
