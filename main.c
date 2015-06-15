@@ -91,7 +91,6 @@ void initialization(int argc, char **argv)
   MPI_Barrier(MPI_COMM_WORLD);
 }
 
-//PHASE 2: INSTITUTE DRAWING
 void rand_institute()
 {
   my_institute = rand()%(institutes+1);//(2*institutes)-institutes+1;
@@ -174,6 +173,70 @@ void calculate_meeting_number()
   max_known_meeting_id+=active_institutes;
 }
 
+void calculate_cylon_number()
+{
+  my_cylon=1+queue_position(queue[my_institute], tid);
+}
+
+void send_ready()
+{
+  int i;
+  int q_size = queue_count_below_limit(queues[my_institute], cylons);
+  for(i=0;i<q_size;i++)
+    {
+      int needed_id = queue_get_id(queues[my_institute], j);
+      if(needed_id!=tid)
+	MPI_Send( &message, 1, mpi_msg_type, needed_id, MSG_READY, MPI_COMM_WORLD);
+    }
+}
+
+void collect_readys()
+{
+  int i;
+  int q_size = queue_count_below_limit(queues[my_institute], cylons);
+  for(i=0;i<q_size-1;i++)
+  {
+    msg res;
+    MPI_Status status;
+    lamport_clock++;
+    MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_READY, MPI_COMM_WORLD, &status);  
+    lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;
+    }
+}
+
+void send_relase()
+{
+  int i;
+  msg message;
+  message.id=tid;
+  message.institute=my_institute;
+  queue_remove(queues[my_institute], tid);
+  lamport_clock++;
+  message.lamport=lamport_clock;
+  for(i=0;i<size;i++)
+    if(i!=tid)
+      MPI_Send( &message, 1, mpi_msg_type, i, MSG_RELASE, MPI_COMM_WORLD);
+}
+
+void collect_relases()
+{
+  int q_size=0;
+  int i;
+  for(i=1;i<institutes+1;i++)
+    q_size+=queue_count_below_limit(queue[i], cylons);
+  for(i=0;i<size;i++)
+  {  
+    if(j==tid) 
+      continue;
+    msg res;
+    MPI_Status status;
+    lamport_clock++;
+    MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_FREE, MPI_COMM_WORLD, &status);
+    lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;  
+    queue_remove(queues[res.institute], res.id);
+  }
+}
+
 void main_loop()
 {
   int i=0; 
@@ -192,116 +255,40 @@ void main_loop()
     //RECIEVE RESPONSES FROM ALL
     collect_responses();
     
-    //COMPARE TOPS RANKS
-    int my_rank = 1;
-    int my_inst_id, my_inst_lamport;
-    queue_top(queues[institute], &my_inst_id, &my_inst_lamport);
-    for(j=1;j<institutes+1;j++)
-    {
-      int inst_id, inst_lamport;
-      queue_top(queues[j], &inst_id, &inst_lamport);
-      if((inst_lamport<my_inst_lamport) || ((inst_lamport==my_inst_lamport) && (inst_id<my_inst_id)))
-	my_rank++;
-    }
-    //printf("[%4d:%4d] My_rank:%4d, institute:%4d\n", lamport_clock, tid, my_rank, institute);
-    
-    //SET MEETING ID
-    int my_meeting = max_known_meeting_id+my_rank;
-    
-    //SET MAX_KNOWN_MEETING_ID
-    max_known_meeting_id+=my_rank;
-    //printf("[%4d:%4d] institute:%4d meeting:%4d\n", lamport_clock, tid, institute, my_meeting);
-    message.meeting=my_meeting;
-    
-    //SEND MEETING NUMBER TO ALL
-    lamport_clock++;
-    message.lamport=lamport_clock;
-    for(j=0;j<size;j++)
-      if(j!=tid)
-	MPI_Send( &message, 1, mpi_msg_type, j, MSG_MEETING, MPI_COMM_WORLD);
-    
-    //RECIEVE MEETINGS NUMBERS FROM ALL
-    for(j=0;j<size;j++)
-    {
-      if(j==tid) continue;
-      msg res;
-      MPI_Status status;
-      lamport_clock++;
-      MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_MEETING, MPI_COMM_WORLD, &status);
-      lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;
-      if(res.institute != 0)
-      max_known_meeting_id=res.meeting > max_known_meeting_id ? res.meeting : max_known_meeting_id;
-      //printf("[%4d:%4d] Recv meeting id:%4d lamport:%4d meeting:%4d\n", lamport_clock, tid, res.id, res.lamport, res.meeting);
-      queue_set_meeting(queues[res.institute], res.id, res.meeting);
-    }
-    
-    //if(institute==1)
-    //  print_all(queues[institute], tid);
-    
-    //SET CYLON ID
-    int my_cylon=queue_position(queues[institute], tid)+1;
-    if(my_institute!=0)
-    printf("[ %3d %3d ] institute:%4d meeting:%4d cylon:%4d\n", lamport_clock, tid, institute, my_meeting, my_cylon);
-    
-    //SEND READY TO ALL COMPANIONS
-    int q_size = queue_size(queues[my_institute]);
-    for(j=0;j<q_size;j++)
-    {
-      int needed_id = queue_get_id(queues[my_institute], j);
-      if(needed_id!=tid)
-	MPI_Send( &message, 1, mpi_msg_type, needed_id, MSG_READY, MPI_COMM_WORLD);
-    }
-
-    
     //RECIEVE READY FROM ALL COMPANIONS
-    for(j=0;j<q_size-1;j++)
-    {
-      msg res;
-      MPI_Status status;
-      lamport_clock++;
-      MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_READY, MPI_COMM_WORLD, &status);
-      lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;
-    }
+   
     
     //ACTUAL MEETING
     sleep(rand()%4);
     
     //SEND FREE TO ALL
-    queue_remove(queues[my_institute], tid);
-    lamport_clock++;
-    message.lamport=lamport_clock;
-    for(j=0;j<size;j++)
-      if(j!=tid)
-	MPI_Send( &message, 1, mpi_msg_type, j, MSG_FREE, MPI_COMM_WORLD);
+    
     
     //RECIEVE FREE FROM ALL
-    for(j=0;j<size;j++)
-    {
-      if(j==tid) continue;
-      msg res;
-      MPI_Status status;
-      lamport_clock++;
-      MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_FREE, MPI_COMM_WORLD, &status);
-      lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;
-      queue_remove(queues[res.institute], res.id);
+    
     } 
       
     i++;
   }
 }
 
+void cleanup()
+{
+  MPI_Type_free(&mpi_msg_type);
+  
+  int i;
+    for(i=0;i<institutes+1;i++)
+      queue_free(queues[i]);
+    MPI_Finalize();
+}
+
 int main(int argc,char **argv)
 {
-    //PROCES INICJALIZUJE ZMIENNE LOKALNE
     initialization(argc, argv);    
     
     main_loop();
     
-    MPI_Type_free(&mpi_msg_type);
+    cleanup();
     
-    int i;
-    for(i=0;i<institutes+1;i++)
-      queue_free(queues[i]);
-    MPI_Finalize();
     return 0;
 }
