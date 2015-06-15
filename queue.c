@@ -199,3 +199,23 @@ int queue_get_id(r_queue* queue, int num)
   
   return entry!=NULL ? entry->id : -1;
 }
+
+int queue_count_with_meeting(r_queue* queue)
+{
+  int i=0;
+  
+  queue_entry* entry = queue->entries;
+  while(entry!=NULL)
+  {
+    if(entry->meeting_id>0)
+      i++;
+    entry=entry->next;
+  }
+  return i;
+}
+
+int queue_count_below_limit(r_queue* queue, int cylons)
+{
+  int size = queue_size(queue);
+  return size > cylons ? cylons : size;
+}

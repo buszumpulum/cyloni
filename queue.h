@@ -40,3 +40,7 @@ int queue_size(r_queue* queue);//TESTED
 int queue_top(r_queue* queue, int *id, int *lamport);//TESTED
 
 int queue_position(r_queue* queue, int id);//TESTED
+
+int queue_count_with_meeting(r_queue* queue);
+
+int queue_count_below_limit(r_queue* queue, int cylons);
