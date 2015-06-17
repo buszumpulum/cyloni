@@ -10,6 +10,9 @@
 #define MSG_RELASE 300
 #define MSG_READY 400
 
+#define TRUE 1
+#define FALSE 0
+
 typedef struct msg{
   int id;
   int lamport;
@@ -27,7 +30,6 @@ int my_institute=0;
 int my_meeting=0;
 MPI_Datatype mpi_msg_type;
 int size, tid;
-int cycles=10;
 
 void print_all(r_queue* queue)
 {
@@ -67,18 +69,12 @@ void parse_params(int argc, char **argv)
     
     if(strcmp(argv[i],"-c")==0)
       cylons = atoi(argv[i+1]);
-    
-    if(strcmp(argv[i],"-n")==0)
-      cycles = atoi(argv[i+1]);
   }
   if(institutes<=0)
     institutes=10;
   
   if(cylons<=0)
     cylons=30;
-  
-  if(cycles<0)
-    cycles=10;
 }
 
 void initialization(int argc, char **argv)
@@ -270,12 +266,24 @@ void collect_relases()
 
 void main_loop()
 {
-  int i=0;
-  while(i<=cycles)
+  int phase_get_institute = TRUE;
+  int phase_send_request = FALSE;
+  while(1)
   {
-    random_institute();
+    if(phase_get_institute==TRUE)
+    {
+      random_institute();
+      if(my_institute>0)
+      {
+	phase_get_institute=FALSE;
+      }
+    }
     
-    send_request();
+    if(phase_send_request==TRUE)
+    {
+      send_request();//BLOKUJĄCA
+      phase_send_request=FALSE;
+    }
     
     collect_requests_and_respond();
     
@@ -320,8 +328,6 @@ void main_loop()
     my_cylon=0;
     my_meeting=0;
     
-    if(cycles!=0)
-      i++;
   }
 }
 
