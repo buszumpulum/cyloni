@@ -4,6 +4,7 @@
 #include <time.h>
 #include <string.h>
 #include "queue.h"
+#include "messages.h"
 
 #define MSG_REQUEST 100
 #define MSG_RESPONSE 200
@@ -21,6 +22,7 @@ typedef struct msg{
 } msg;
 
 r_queue **queues;
+m_queue* msg_queue;
 int lamport_clock=0;
 int max_known_meeting_id=0;
 int institutes=10;
@@ -43,7 +45,6 @@ void print_all(r_queue* queue)
   }
 }
 
-//PHASE 1 INITIALIZATION
 void init_msg_struct()
 {
   int blocklengths[4] = {1,1,1,1};
@@ -91,6 +92,8 @@ void initialization(int argc, char **argv)
   for(i=0;i<(institutes)+1;i++)
     queues[i] = queue_init(i);
   
+  msg_queue = m_queue_init();
+  
   srand(clock()*tid);
   
   MPI_Barrier(MPI_COMM_WORLD);
@@ -111,13 +114,28 @@ void send_request()
   message.lamport=++lamport_clock;
   message.institute=my_institute;
   queue_add(queues[my_institute], tid, lamport_clock);
-  //printf("%d : [%d] sending request for institute=%d\n", lamport_clock, tid, my_institute);
+  printf("%d : [%d] sending request for institute=%d\n", lamport_clock, tid, my_institute);
   for(i=0;i<size;i++)
   if(i!=tid)
   {
     lamport_clock++;
     MPI_Send( &message, 1, mpi_msg_type, i, MSG_REQUEST, MPI_COMM_WORLD);
   }
+}
+
+void get_request_and_respond()
+{
+  MPI_Status status;
+  msg res;
+  
+  MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_REQUEST, MPI_COMM_WORLD, &status);
+  lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;
+  queue_add(queues[res.institute], res.id, res.lamport);
+  
+  msg message;
+  message.id=tid;
+  message.lamport=++lamport_clock;
+  MPI_Send( &message, 1, mpi_msg_type, res.id, MSG_RESPONSE, MPI_COMM_WORLD);
 }
 
 void collect_requests_and_respond()
@@ -159,9 +177,9 @@ void collect_responses()
   MPI_Status status;
   for(i=0;i<size-1;i++)
   {
-    lamport_clock++;
-     printf("%d : [%d] (%d) responses still expected\n", lamport_clock, tid, size-1-i);
+    printf("%d : [%d] (%d) responses still expected\n", lamport_clock, tid, size-1-i);
     MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_RESPONSE, MPI_COMM_WORLD, &status);
+    lamport_clock++;
     lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;
     printf("%d : [%d] recieved response from %d\n", lamport_clock, tid, res.id);
   }
@@ -268,6 +286,8 @@ void main_loop()
 {
   int phase_get_institute = TRUE;
   int phase_send_request = FALSE;
+  int phase_collect_responses = TRUE;
+  int responding_active = TRUE;
   while(1)
   {
     if(phase_get_institute==TRUE)
@@ -276,18 +296,27 @@ void main_loop()
       if(my_institute>0)
       {
 	phase_get_institute=FALSE;
+	phase_send_request=TRUE;
       }
     }
     
     if(phase_send_request==TRUE)
     {
-      send_request();//BLOKUJĄCA
+      send_request();
       phase_send_request=FALSE;
     }
     
-    collect_requests_and_respond();
+    if(phase_collect_responses==TRUE)
+    {
+      collect_responses();
+    }
     
-    collect_responses();
+    
+    
+    if(responding_active==TRUE)
+    {
+      get_request_and_respond();
+    }
     
     calculate_meeting_number();
     
@@ -338,6 +367,9 @@ void cleanup()
   int i;
     for(i=0;i<institutes+1;i++)
       queue_free(queues[i]);
+    
+    m_queue_free(msg_queue);
+    
     MPI_Finalize();
 }
 
