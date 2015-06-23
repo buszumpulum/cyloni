@@ -15,7 +15,6 @@ typedef struct msg{
   int id;
   int lamport;
   int institute;
-  int meeting;
 } msg;
 
 r_queue **queues;
@@ -43,16 +42,15 @@ void print_all(r_queue* queue)
 
 void init_msg_struct()
 {
-  int blocklengths[4] = {1,1,1,1};
-  MPI_Datatype types[4] = {MPI_INT, MPI_INT, MPI_INT, MPI_INT};
-  MPI_Aint offsets[4];
+  int blocklengths[3] = {1,1,1};
+  MPI_Datatype types[3] = {MPI_INT, MPI_INT, MPI_INT};
+  MPI_Aint offsets[3];
 
   offsets[0] = offsetof(msg, id);
   offsets[1] = offsetof(msg, lamport);
   offsets[2] = offsetof(msg, institute);
-  offsets[3] = offsetof(msg, meeting);
 
-  MPI_Type_create_struct(4, blocklengths, offsets, types, &mpi_msg_type);
+  MPI_Type_create_struct(3, blocklengths, offsets, types, &mpi_msg_type);
   MPI_Type_commit(&mpi_msg_type);
 }
 
@@ -320,7 +318,7 @@ void main_loop()
       }
 	
      calculate_cylon_number();
-      
+
      send_ready();
      
      collect_readys();
