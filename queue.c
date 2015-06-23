@@ -85,7 +85,23 @@ int queue_add(r_queue* queue, int send_id, int lamport_clock)
 
 int queue_set_meeting(r_queue* queue, int id, int meeting)
 {
+  int i=0;
   queue_entry* field = queue->entries->next;
+  queue_entry* entry = queue->entries->next;
+  if(entry==NULL)
+  while(field!=NULL && i++!=id)
+    field=field->next;
+  if(field==NULL)
+    return -1;
+  field->meeting_id=meeting;
+  return 0;
+}
+
+int queue_set_meeting_by_id(r_queue* queue, int id, int meeting)
+{
+  int i=0;
+  queue_entry* field = queue->entries->next;queue_entry* entry = queue->entries->next;
+  if(entry==NULL)
   while(field!=NULL && field->id!=id)
     field=field->next;
   if(field==NULL)
@@ -93,6 +109,7 @@ int queue_set_meeting(r_queue* queue, int id, int meeting)
   field->meeting_id=meeting;
   return 0;
 }
+
 
 int queue_set_cylon(r_queue* queue, int id, int cylon)
 {
@@ -116,6 +133,32 @@ queue_entry* queue_get(r_queue* queue, int id)
   while(field!=NULL && field->id!=id)
     field=field->next;
   return field;
+}
+
+queue_entry queue_get_top(r_queue* queue)
+{
+  queue_entry top;
+  queue_entry* entry = queue->entries->next;
+  if(entry==NULL)
+    top.id = -1;
+  else
+  {
+    top.id = entry->id;
+    top.lamport_clock=entry->lamport_clock;
+    top.cylon_id = entry->cylon_id;
+  }
+  return top;
+}
+
+int queue_get_top_meeting(r_queue* queue)
+{
+  int top;
+  queue_entry* entry = queue->entries->next;
+  if(entry==NULL)
+    top = -1;
+  else
+    top = entry->meeting_id;
+  return top;
 }
 
 int queue_remove(r_queue* queue, int id)
@@ -231,4 +274,18 @@ int queue_clean(r_queue* queue)
     field=rest;
   }
   return 0;
+}
+
+int queue_get_lamport(r_queue* queue, int num)
+{
+  int i=-1;
+  
+  queue_entry* entry = queue->entries;
+  while(entry!=NULL && i!=num)
+  {
+    i++;
+    entry=entry->next;
+  }
+  
+  return entry!=NULL ? entry->lamport_clock : -1;
 }

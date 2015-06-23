@@ -22,6 +22,7 @@ int queue_free(r_queue* queue);//TESTED
 int queue_add(r_queue* queue, int id, int lamport_clock);//TESTED
 
 int queue_set_meeting(r_queue* queue, int id, int meeting);//TESTED
+int queue_set_meeting_by_id(r_queue* queue, int id, int meeting);
 
 int queue_set_cylon(r_queue* queue, int send_id, int cylon);//TESTED
 
@@ -29,7 +30,13 @@ void queue_sort(r_queue* queue);//TODO
 
 queue_entry* queue_get(r_queue* queue, int id);//TESTED
 
+queue_entry queue_get_top(r_queue* queue);
+
+int queue_get_top_meeting(r_queue* queue);
+
 int queue_get_id(r_queue* queue, int num);
+
+int queue_get_lamport(r_queue* queue, int num);
 
 int queue_remove(r_queue* queue, int id);//TESTED
 

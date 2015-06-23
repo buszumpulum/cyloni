@@ -4,15 +4,14 @@
 #include <time.h>
 #include <string.h>
 #include "queue.h"
-#include "messages.h"
 
 #define MSG_REQUEST 100
 #define MSG_RESPONSE 200
 #define MSG_RELASE 300
 #define MSG_READY 400
 
-#define TRUE 1
-#define FALSE 0
+#define STATE_NORMAL 0
+#define STATE_NEXT_ROUND 1
 
 typedef struct msg{
   int id;
@@ -22,7 +21,6 @@ typedef struct msg{
 } msg;
 
 r_queue **queues;
-m_queue* msg_queue;
 int lamport_clock=0;
 int max_known_meeting_id=0;
 int institutes=10;
@@ -92,7 +90,6 @@ void initialization(int argc, char **argv)
   for(i=0;i<(institutes)+1;i++)
     queues[i] = queue_init(i);
   
-  msg_queue = m_queue_init();
   
   srand(clock()*tid);
   
@@ -130,7 +127,8 @@ void get_request_and_respond()
   
   MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_REQUEST, MPI_COMM_WORLD, &status);
   lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;
-  queue_add(queues[res.institute], res.id, res.lamport);
+  if(res.institute>0)
+    queue_add(queues[res.institute], res.id, res.lamport);
   
   msg message;
   message.id=tid;
@@ -162,8 +160,8 @@ void collect_requests_and_respond()
     MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_REQUEST, MPI_COMM_WORLD, &status);
     lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;
     //printf("%d : [%d] recieved request from %d(%d) : institute=%d\n", lamport_clock, tid, res.id, res.lamport, res.institute);
-    queue_add(queues[res.institute], res.id, res.lamport);
-    
+    if(res.institute>0)
+      queue_add(queues[res.institute], res.id, res.lamport);  
     message.lamport=++lamport_clock;
     MPI_Send( &message, 1, mpi_msg_type, res.id, MSG_RESPONSE, MPI_COMM_WORLD);
     //printf("%d : [%d] sent respond to %d\n", lamport_clock, tid, res.id);
@@ -175,6 +173,10 @@ void collect_responses()
   msg res;
   int i;
   MPI_Status status;
+  for(i=1;i<institutes+1;i++)
+  {
+    
+  }
   for(i=0;i<size-1;i++)
   {
     printf("%d : [%d] (%d) responses still expected\n", lamport_clock, tid, size-1-i);
@@ -189,22 +191,45 @@ void collect_responses()
 void calculate_meeting_number()
 {
   int i;
+  int j;
   int active_institutes=0;
-  int my_rank = 1;
-  int my_inst_id, my_inst_lamport;
+  int rank = 0;
+  int q_size;
   
-  queue_top(queues[my_institute], &my_inst_id, &my_inst_lamport);
+  int my_group = queue_position(queues[my_institute], tid)/cylons;
   
   for(i=1;i<institutes+1;i++)
   {
-    int inst_id, inst_lamport;
-    queue_top(queues[i], &inst_id, &inst_lamport);
-    if((inst_lamport<my_inst_lamport) || ((inst_lamport==my_inst_lamport) && (inst_id<my_inst_id)))
-      my_rank++;
-    if(queue_size(queues[i])>0)
-      active_institutes++;
+    q_size=queue_size(queues[i]);
+    for(j=0;j<q_size;j++)
+      if(j%cylons==0)
+      {
+	int id = queue_get_id(queues[i], j);
+	queue_add(queues[0], id, queue_get_lamport(queues[i], j));
+	queue_set_cylon(queues[0], id, j);
+	queue_set_meeting_by_id(queues[0], id, i);
+      }
   }
-  my_meeting=max_known_meeting_id+my_rank;
+  
+  q_size = queue_size(queues[0]);
+  
+  active_institutes=queue_size(queues[0]);
+  
+  for(i=1;i<=q_size;i++)
+  {
+    queue_entry entry = queue_get_top(queues[0]);
+    queue_remove(queues[0], entry.id);
+    
+    if(entry.meeting_id==my_institute)
+    {
+      if(rank==my_group)
+	my_meeting=max_known_meeting_id+i;
+      rank++;
+    }
+    int lower_boundry = entry.cylon_id;
+    for(j=lower_boundry;j< lower_boundry+cylons;j++)
+      queue_set_meeting(queues[entry.meeting_id], j, max_known_meeting_id+i); 
+  }
   max_known_meeting_id+=active_institutes;
   //printf("%d : [%d] is attempting to meeting number %d (%d) in institute %d\n", lamport_clock, tid, my_meeting, max_known_meeting_id, my_institute);
 }
@@ -260,76 +285,44 @@ void send_relase()
   message.lamport=lamport_clock;
   for(i=0;i<size;i++)
     if(i!=tid)
+    {
       MPI_Send( &message, 1, mpi_msg_type, i, MSG_RELASE, MPI_COMM_WORLD);
+      lamport_clock++;
+    }
   //printf("%d : [%d] relased request to visit institute %d\n", lamport_clock, tid, my_institute);
 }
 
-void collect_relases()
-{
-  int q_size=0;
-  int i;
-  for(i=1;i<institutes+1;i++)
-    q_size+=queue_count_below_limit(queues[i], cylons);
-  for(i=0;i<q_size;i++)
-  {  
-    msg res;
-    MPI_Status status;
-    lamport_clock++;
-    MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_RELASE, MPI_COMM_WORLD, &status);
-    lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;  
-    queue_remove(queues[res.institute], res.id);
-    printf("%d : [%d] relased request from %d\n", lamport_clock, tid,res.id);
-  }
+void get_relase()
+{  
+  msg res;
+  MPI_Status status;
+  lamport_clock++;
+  MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_RELASE, MPI_COMM_WORLD, &status);
+  lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;  
+  queue_remove(queues[res.institute], res.id);
+  printf("%d : [%d] relased request from %d\n", lamport_clock, tid,res.id);
 }
 
 void main_loop()
 {
-  int phase_get_institute = TRUE;
-  int phase_send_request = FALSE;
-  int phase_collect_responses = TRUE;
-  int responding_active = TRUE;
   while(1)
   {
-    if(phase_get_institute==TRUE)
-    {
-      random_institute();
-      if(my_institute>0)
-      {
-	phase_get_institute=FALSE;
-	phase_send_request=TRUE;
-      }
-    }
+    random_institute();
     
-    if(phase_send_request==TRUE)
-    {
-      send_request();
-      phase_send_request=FALSE;
-    }
+    send_request();
+     
+    collect_responses();
     
-    if(phase_collect_responses==TRUE)
-    {
-      collect_responses();
-    }
-    
-    
-    
-    if(responding_active==TRUE)
-    {
-      get_request_and_respond();
-    }
+    get_request_and_respond();
     
     calculate_meeting_number();
     
     if(my_institute!=0)
     {
-      while(queue_position(queues[my_institute], tid)>=cylons)
+      while(queue_get_top_meeting(queues[my_institute])!=my_meeting)
       {
-	printf("%d : [%d] failed to attempt meeting %d in institute %d; Waiting for relases...\n", lamport_clock, tid, my_meeting, my_institute);
-	collect_relases();
-	
-	collect_requests_and_respond();
-	
-	calculate_meeting_number();
+	printf("%d : [%d] Previos meeting in institute %d still going; Waiting for relase...\n", lamport_clock, tid, my_institute);
+	get_relase();
       }
 	
      calculate_cylon_number();
@@ -343,20 +336,18 @@ void main_loop()
    //  printf("%d : [%d] meeting %d ended\n", ++lamport_clock, tid, my_meeting);
      
      send_relase();
-    }
-    else
-     printf("%d : [%d] not invited to any institute\n", ++lamport_clock, tid);
-   
-    queue_remove(queues[my_institute], tid);
-    
-    collect_relases();
-    
-    queue_clean(queues[0]);
-    
+     
+     queue_remove(queues[my_institute], tid);
     my_institute=0;
     my_cylon=0;
     my_meeting=0;
-    
+      
+    }
+    else
+    {
+     printf("%d : [%d] not invited to any institute. Gonna do science for a while.\n", ++lamport_clock, tid);
+     sleep(rand()%5);
+    }  
   }
 }
 
@@ -367,8 +358,6 @@ void cleanup()
   int i;
     for(i=0;i<institutes+1;i++)
       queue_free(queues[i]);
-    
-    m_queue_free(msg_queue);
     
     MPI_Finalize();
 }
