@@ -155,7 +155,7 @@ void collect_requests_and_respond()
     msg res;
     MPI_Status status;
     lamport_clock++;
-    printf("%d : [%d] (%d) requests still expected\n", lamport_clock, tid, size-i);
+    //printf("%d : [%d] (%d) requests still expected\n", lamport_clock, tid, size-i);
     MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_REQUEST, MPI_COMM_WORLD, &status);
     lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;
     printf("%d : [%d] recieved request from %d(%d) : institute=%d\n", lamport_clock, tid, res.id, res.lamport, res.institute);
@@ -169,7 +169,7 @@ void collect_requests_and_respond()
       queue_add(queues[res.institute], res.id, res.lamport);  
     message.lamport=++lamport_clock;
     MPI_Send( &message, 1, mpi_msg_type, res.id, MSG_RESPONSE, MPI_COMM_WORLD);
-    printf("%d : [%d] sent respond to %d\n", lamport_clock, tid, res.id);
+    //printf("%d : [%d] sent respond to %d\n", lamport_clock, tid, res.id);
   }
 }
 
@@ -184,11 +184,11 @@ void collect_responses()
   }
   for(i=0;i<size-1;i++)
   {
-    printf("%d : [%d] (%d) responses still expected\n", lamport_clock, tid, size-1-i);
+    //printf("%d : [%d] (%d) responses still expected\n", lamport_clock, tid, size-1-i);
     MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_RESPONSE, MPI_COMM_WORLD, &status);
     lamport_clock++;
     lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;
-    printf("%d : [%d] recieved response from %d\n", lamport_clock, tid, res.id);
+    //printf("%d : [%d] recieved response from %d\n", lamport_clock, tid, res.id);
   }
   printf("%d : [%d] collected all responses\n", lamport_clock, tid);
 }
@@ -274,7 +274,7 @@ void collect_readys()
     msg res;
     MPI_Status status;
     lamport_clock++;
-     printf("%d : [%d] (%d) readys still expected\n", lamport_clock, tid, q_size-1-i);
+     //printf("%d : [%d] (%d) readys still expected\n", lamport_clock, tid, q_size-1-i);
     MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_READY, MPI_COMM_WORLD, &status);  
     lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;
   }
@@ -296,7 +296,7 @@ void send_relase()
       MPI_Send( &message, 1, mpi_msg_type, i, MSG_RELASE, MPI_COMM_WORLD);
       lamport_clock++;
     }
-  printf("%d : [%d] relased request to visit institute %d\n", lamport_clock, tid, my_institute);
+  printf("%d : [%d] relased request institute %d\n", lamport_clock, tid, my_institute);
 }
 
 void main_loop()
@@ -327,9 +327,9 @@ void main_loop()
      
      collect_readys();
      
-    // printf("%d : [%d] meeting %d started\n", ++lamport_clock, tid, my_meeting);
+     printf("%d : [%d] meeting %d started\n", ++lamport_clock, tid, my_meeting);
      sleep(rand()%5);
-   //  printf("%d : [%d] meeting %d ended\n", ++lamport_clock, tid, my_meeting);
+     printf("%d : [%d] went home from meeting %d\n", ++lamport_clock, tid, my_meeting);
      
      send_relase();
      
