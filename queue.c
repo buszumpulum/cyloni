@@ -56,6 +56,7 @@ int queue_free(r_queue* queue)
 
 int queue_add(r_queue* queue, int send_id, int lamport_clock)
 {
+  
   queue_entry* entry = malloc(sizeof(queue_entry));
   int i=1;
   
@@ -87,8 +88,6 @@ int queue_set_meeting(r_queue* queue, int id, int meeting)
 {
   int i=0;
   queue_entry* field = queue->entries->next;
-  queue_entry* entry = queue->entries->next;
-  if(entry==NULL)
   while(field!=NULL && i++!=id)
     field=field->next;
   if(field==NULL)
@@ -100,8 +99,7 @@ int queue_set_meeting(r_queue* queue, int id, int meeting)
 int queue_set_meeting_by_id(r_queue* queue, int id, int meeting)
 {
   int i=0;
-  queue_entry* field = queue->entries->next;queue_entry* entry = queue->entries->next;
-  if(entry==NULL)
+  queue_entry* field = queue->entries->next;
   while(field!=NULL && field->id!=id)
     field=field->next;
   if(field==NULL)
@@ -146,6 +144,7 @@ queue_entry queue_get_top(r_queue* queue)
     top.id = entry->id;
     top.lamport_clock=entry->lamport_clock;
     top.cylon_id = entry->cylon_id;
+    top.meeting_id=entry->meeting_id;
   }
   return top;
 }
