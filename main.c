@@ -159,11 +159,12 @@ void collect_requests_and_respond()
     MPI_Recv( &res, 1, mpi_msg_type, MPI_ANY_SOURCE, MSG_REQUEST, MPI_COMM_WORLD, &status);
     lamport_clock=res.lamport > lamport_clock ? res.lamport : lamport_clock;
     printf("%d : [%d] recieved request from %d(%d) : institute=%d\n", lamport_clock, tid, res.id, res.lamport, res.institute);
+    
     int flag;
-    MPI_Iprobe(MPI_ANY_SOURCE, MSG_RELASE, MPI_COMM_WORLD, &flag,
-               &status);
+    MPI_Iprobe(MPI_ANY_SOURCE, MSG_RELASE, MPI_COMM_WORLD, &flag, &status);
     if(flag)
       get_relase();
+    
     if(res.institute>0)
       queue_add(queues[res.institute], res.id, res.lamport);  
     message.lamport=++lamport_clock;
@@ -192,21 +193,12 @@ void collect_responses()
   printf("%d : [%d] collected all responses\n", lamport_clock, tid);
 }
 
-void calculate_meeting_number()
+void init_meeting_queue()
 {
-  int i;
-  int j;
-  int active_institutes=0;
-  int rank = 0;
-  int q_size;
-  
-  int my_group = queue_position(queues[my_institute], tid)/cylons;
-  
-  
+  int i,j;
   for(i=1;i<institutes+1;i++)
   {
-
-    q_size=queue_size(queues[i]);
+    int q_size=queue_size(queues[i]);
     for(j=0;j<q_size;j++)
       if(j%cylons==0)
       {
@@ -216,6 +208,18 @@ void calculate_meeting_number()
 	queue_set_meeting_by_id(queues[0], id, i);
       }
   }
+}
+
+void calculate_meeting_number()
+{
+  int i,j;
+  int active_institutes=0;
+  int rank = 0;
+  int q_size;
+  int my_group = queue_position(queues[my_institute], tid)/cylons;
+  
+  init_meeting_queue();
+  
   q_size = queue_size(queues[0]);
   active_institutes=q_size;
   
